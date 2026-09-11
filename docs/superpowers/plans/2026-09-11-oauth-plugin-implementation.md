@@ -48,7 +48,7 @@ pluginManagement {
 
 plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
-    id("org.jetbrains.intellij.platform.settings") version "2.16.0"
+    id("org.jetbrains.intellij.platform.settings") version "2.18.1"
 }
 
 @Suppress("UnstableApiUsage")
@@ -90,6 +90,7 @@ dependencies {
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
 }
 
 java {
@@ -131,6 +132,7 @@ build/
 out/
 .idea/
 *.iml
+.intellijPlatform/
 ```
 
 - [ ] **Step 5: Create the minimal `src/main/resources/META-INF/plugin.xml`**
@@ -157,14 +159,22 @@ out/
 
 - [ ] **Step 6: Generate the Gradle wrapper**
 
-Run: `gradle wrapper --gradle-version 8.10 --distribution-type bin`
+The IntelliJ Platform Gradle Plugin 2.16.0 requires Gradle 9.0+ (confirmed by
+running the build below against Gradle 8.10 first: it fails fast with
+`IntelliJ Platform Gradle Plugin requires Gradle Gradle 9.0.0 and higher`).
+Use Gradle 9.5.0.
+
+Run: `gradle wrapper --gradle-version 9.5.0 --distribution-type bin`
 
 Expected: creates `gradlew`, `gradlew.bat`, and `gradle/wrapper/gradle-wrapper.jar` + `gradle-wrapper.properties`.
 
 If no system `gradle` binary is available, download the wrapper files directly instead:
 
 ```bash
-curl -sL -o gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v8.10.0/gradle/wrapper/gradle-wrapper.jar
+curl -sL -o gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v9.5.0/gradle/wrapper/gradle-wrapper.jar
+curl -sL -o gradlew https://raw.githubusercontent.com/gradle/gradle/v9.5.0/gradlew
+curl -sL -o gradlew.bat https://raw.githubusercontent.com/gradle/gradle/v9.5.0/gradlew.bat
+chmod +x gradlew
 ```
 
 and hand-write `gradle/wrapper/gradle-wrapper.properties`:
@@ -172,14 +182,12 @@ and hand-write `gradle/wrapper/gradle-wrapper.properties`:
 ```properties
 distributionBase=GRADLE_USER_HOME
 distributionPath=wrapper/dists
-distributionUrl=https\://services.gradle.org/distributions/gradle-8.10-bin.zip
+distributionUrl=https\://services.gradle.org/distributions/gradle-9.5.0-bin.zip
 networkTimeout=10000
 validateDistributionUrl=true
 zipStoreBase=GRADLE_USER_HOME
 zipStorePath=wrapper/dists
 ```
-
-plus `gradlew` / `gradlew.bat` from the same Gradle tag.
 
 - [ ] **Step 7: Verify the empty plugin project builds**
 
@@ -752,7 +760,7 @@ public final class AuthService {
 
 Run: `./gradlew test --tests "com.example.oauthplugin.auth.AuthServiceCryptoTest" --console=plain`
 
-Expected: `BUILD SUCCESSFUL`, all 8 tests pass.
+Expected: `BUILD SUCCESSFUL`, all 7 tests pass.
 
 - [ ] **Step 5: Commit**
 
