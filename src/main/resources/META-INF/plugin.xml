@@ -1,0 +1,35 @@
+<idea-plugin>
+    <id>com.example.oauthplugin</id>
+    <name>OAuth Sample Plugin</name>
+    <vendor email="support@example.com" url="https://example.com">Example</vendor>
+    <description><![CDATA[
+        Sample IntelliJ plugin demonstrating OAuth 2.0 Authorization Code + PKCE login,
+        application-level token storage via PasswordSafe, and authenticated API calls.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <notificationGroup id="OAuth Sample Plugin" displayType="BALLOON"/>
+        <applicationConfigurable
+                parentId="tools"
+                instance="com.example.oauthplugin.settings.OAuthConfigurable"
+                id="com.example.oauthplugin.settings.OAuthConfigurable"
+                displayName="OAuth Sample Plugin"/>
+        <statusBarWidgetFactory
+                id="com.example.oauthplugin.AuthStatusBarWidget"
+                implementation="com.example.oauthplugin.statusbar.AuthStatusBarWidgetFactory"/>
+    </extensions>
+
+    <actions>
+        <group id="com.example.oauthplugin.AuthActionsGroup" text="OAuth Sample" popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <action id="com.example.oauthplugin.LoginAction"
+                    class="com.example.oauthplugin.actions.LoginAction"
+                    text="Sign In..." description="Sign in via OAuth"/>
+            <action id="com.example.oauthplugin.LogoutAction"
+                    class="com.example.oauthplugin.actions.LogoutAction"
+                    text="Sign Out" description="Sign out and clear local tokens"/>
+        </group>
+    </actions>
+</idea-plugin>
