@@ -82,4 +82,19 @@ class AuthServiceCryptoTest {
         assertTrue(AuthService.parseQuery(null).isEmpty());
         assertTrue(AuthService.parseQuery("").isEmpty());
     }
+
+    @Test
+    void escapeHtml_neutralizesScriptInjection() {
+        String malicious = "<script>alert(1)</script>";
+
+        String escaped = AuthService.escapeHtml(malicious);
+
+        assertTrue(!escaped.contains("<script>"), "escaped output must not contain a raw <script> tag");
+        assertEquals("&lt;script&gt;alert(1)&lt;/script&gt;", escaped);
+    }
+
+    @Test
+    void escapeHtml_escapesAllHtmlSpecialCharacters() {
+        assertEquals("&amp;&lt;&gt;&quot;&#39;", AuthService.escapeHtml("&<>\"'"));
+    }
 }

@@ -30,6 +30,7 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -97,14 +98,25 @@ public final class AuthService {
         return future;
     }
 
-    /** Clears local session state. Does not block the EDT. */
-    public void logout() {
+    /**
+     * Clears local session state. Safe to call from the EDT; the actual
+     * clearing happens on the auth executor. The returned future completes
+     * once tokens have actually been cleared.
+     */
+    public CompletableFuture<Void> logout() {
+        CompletableFuture<Void> future = new CompletableFuture<>();
         authExecutor.submit(() -> {
-            // TODO: if the target provider supports a revocation endpoint,
-            // call it here before clearing local tokens.
-            clearStoredTokens();
-            LOG.info("User signed out; local tokens cleared.");
+            try {
+                // TODO: if the target provider supports a revocation endpoint,
+                // call it here before clearing local tokens.
+                clearStoredTokens();
+                LOG.info("User signed out; local tokens cleared.");
+                future.complete(null);
+            } catch (Exception e) {
+                future.completeExceptionally(e);
+            }
         });
+        return future;
     }
 
     /** True if a (possibly expired) session exists locally. */
@@ -118,8 +130,27 @@ public final class AuthService {
      * Throws NotAuthenticatedException if there is no usable session.
      * This performs blocking network I/O when a refresh is needed - call it
      * off the EDT.
+     *
+     * The check-and-refresh is run on the single-thread auth executor - the
+     * same one login() uses - so a refresh can never race another refresh or
+     * a fresh login and clobber a token a concurrent caller just stored.
      */
     public String getValidAccessToken() {
+        try {
+            return authExecutor.submit(this::getValidAccessTokenOnAuthExecutor).get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AuthException("Interrupted while obtaining access token.", e);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new AuthException("Failed to obtain access token.", cause);
+        }
+    }
+
+    private String getValidAccessTokenOnAuthExecutor() {
         String accessToken = readCredential(tokenKey("accessToken"));
         String expiryStr = readCredential(tokenKey("accessTokenExpiry"));
 
@@ -144,6 +175,11 @@ public final class AuthService {
     /** Forces the next getValidAccessToken() call to require a fresh login. */
     public void invalidateSession() {
         clearStoredTokens();
+    }
+
+    /** The HttpClient this service already maintains, for reuse by API callers. */
+    HttpClient getHttpClient() {
+        return httpClient;
     }
 
     // ------------------------------------------------------------------
@@ -204,7 +240,7 @@ public final class AuthService {
 
             String message;
             if (error != null) {
-                message = "Authentication failed: " + error + ". You can close this window.";
+                message = "Authentication failed: " + escapeHtml(error) + ". You can close this window.";
                 codeFuture.completeExceptionally(new AuthException("Provider returned error: " + error));
             } else if (returnedState == null || !returnedState.equals(expectedState)) {
                 message = "Security check failed. You can close this window.";
@@ -369,6 +405,16 @@ public final class AuthService {
 
     private static String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    /** Escapes text reflected into the loopback callback's HTML response. */
+    static String escapeHtml(String value) {
+        return value
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 
     static Map<String, String> parseQuery(String rawQuery) {
