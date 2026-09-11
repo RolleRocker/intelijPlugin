@@ -15,7 +15,7 @@ public final class AuthenticatedApiClient {
     private final HttpClient httpClient;
 
     public AuthenticatedApiClient(AuthService authService) {
-        this(authService, HttpClient.newHttpClient());
+        this(authService, authService.getHttpClient());
     }
 
     AuthenticatedApiClient(AuthService authService, HttpClient httpClient) {
