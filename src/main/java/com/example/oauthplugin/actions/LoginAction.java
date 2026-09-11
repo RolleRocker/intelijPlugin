@@ -1,6 +1,7 @@
 package com.example.oauthplugin.actions;
 
 import com.example.oauthplugin.auth.AuthService;
+import com.example.oauthplugin.statusbar.AuthStatusBarWidget;
 import com.intellij.notification.NotificationGroupManager;
 import com.intellij.notification.NotificationType;
 import com.intellij.openapi.actionSystem.ActionUpdateThread;
@@ -27,6 +28,7 @@ public final class LoginAction extends AnAction {
                                 .createNotification("Signed in successfully", NotificationType.INFORMATION)
                                 .notify(e.getProject());
                     }
+                    AuthStatusBarWidget.refreshAll();
                 }));
     }
 

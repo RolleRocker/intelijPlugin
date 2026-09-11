@@ -1,6 +1,7 @@
 package com.example.oauthplugin.actions;
 
 import com.example.oauthplugin.auth.AuthService;
+import com.example.oauthplugin.statusbar.AuthStatusBarWidget;
 import com.intellij.notification.NotificationGroupManager;
 import com.intellij.notification.NotificationType;
 import com.intellij.openapi.actionSystem.ActionUpdateThread;
@@ -14,12 +15,15 @@ public final class LogoutAction extends AnAction {
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         AuthService authService = ApplicationManager.getApplication().getService(AuthService.class);
-        authService.logout();
 
-        NotificationGroupManager.getInstance()
-                .getNotificationGroup("OAuth Sample Plugin")
-                .createNotification("Signed out", NotificationType.INFORMATION)
-                .notify(e.getProject());
+        authService.logout().whenComplete((result, throwable) ->
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    NotificationGroupManager.getInstance()
+                            .getNotificationGroup("OAuth Sample Plugin")
+                            .createNotification("Signed out", NotificationType.INFORMATION)
+                            .notify(e.getProject());
+                    AuthStatusBarWidget.refreshAll();
+                }));
     }
 
     @Override

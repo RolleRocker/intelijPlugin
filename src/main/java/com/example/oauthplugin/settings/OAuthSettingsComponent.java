@@ -1,6 +1,7 @@
 package com.example.oauthplugin.settings;
 
 import com.example.oauthplugin.auth.AuthService;
+import com.example.oauthplugin.statusbar.AuthStatusBarWidget;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.util.ui.FormBuilder;
 
@@ -12,20 +13,23 @@ import javax.swing.JPanel;
 public final class OAuthSettingsComponent {
 
     private final JPanel panel;
-    private final JLabel statusLabel = new JLabel();
+    private final JLabel statusLabel = new JLabel("Checking sign-in state...");
     private final JButton actionButton = new JButton();
 
     public OAuthSettingsComponent() {
+        actionButton.setEnabled(false);
         actionButton.addActionListener(e -> {
+            actionButton.setEnabled(false);
             AuthService authService = ApplicationManager.getApplication().getService(AuthService.class);
-            if (authService.isLoggedIn()) {
-                authService.logout();
-                refresh();
-            } else {
-                actionButton.setEnabled(false);
-                authService.login().whenComplete((result, throwable) ->
-                        ApplicationManager.getApplication().invokeLater(this::refresh));
-            }
+
+            // isLoggedIn() performs PasswordSafe I/O, so decide the branch off the EDT.
+            ApplicationManager.getApplication().executeOnPooledThread(() -> {
+                if (authService.isLoggedIn()) {
+                    authService.logout().whenComplete((result, throwable) -> onAuthActionComplete());
+                } else {
+                    authService.login().whenComplete((result, throwable) -> onAuthActionComplete());
+                }
+            });
         });
 
         panel = FormBuilder.createFormBuilder()
@@ -41,11 +45,24 @@ public final class OAuthSettingsComponent {
         return panel;
     }
 
+    /** Recomputes login state off the EDT, then updates the panel on the EDT. */
     public void refresh() {
-        AuthService authService = ApplicationManager.getApplication().getService(AuthService.class);
-        boolean loggedIn = authService.isLoggedIn();
-        statusLabel.setText(loggedIn ? "Signed in" : "Not signed in");
-        actionButton.setText(loggedIn ? "Sign Out" : "Sign In...");
-        actionButton.setEnabled(true);
+        ApplicationManager.getApplication().executeOnPooledThread(() -> {
+            AuthService authService = ApplicationManager.getApplication().getService(AuthService.class);
+            boolean loggedIn = authService.isLoggedIn();
+
+            ApplicationManager.getApplication().invokeLater(() -> {
+                statusLabel.setText(loggedIn ? "Signed in" : "Not signed in");
+                actionButton.setText(loggedIn ? "Sign Out" : "Sign In...");
+                actionButton.setEnabled(true);
+            });
+        });
+    }
+
+    private void onAuthActionComplete() {
+        ApplicationManager.getApplication().invokeLater(() -> {
+            refresh();
+            AuthStatusBarWidget.refreshAll();
+        });
     }
 }

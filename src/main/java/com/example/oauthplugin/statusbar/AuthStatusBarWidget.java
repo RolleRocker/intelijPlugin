@@ -9,10 +9,20 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.event.MouseEvent;
+import java.util.Collections;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class AuthStatusBarWidget implements StatusBarWidget, StatusBarWidget.TextPresentation {
 
     public static final String ID = "com.example.oauthplugin.AuthStatusBarWidget";
+
+    private static final Set<AuthStatusBarWidget> ACTIVE_WIDGETS =
+            Collections.newSetFromMap(new ConcurrentHashMap<>());
+
+    // Updated off the EDT in refreshState(); getText() only ever reads this
+    // cached value so the platform can call it cheaply/synchronously.
+    private volatile String cachedText = "Not signed in";
 
     private StatusBar statusBar;
 
@@ -24,10 +34,13 @@ public final class AuthStatusBarWidget implements StatusBarWidget, StatusBarWidg
     @Override
     public void install(@NotNull StatusBar statusBar) {
         this.statusBar = statusBar;
+        ACTIVE_WIDGETS.add(this);
+        refreshState();
     }
 
     @Override
     public void dispose() {
+        ACTIVE_WIDGETS.remove(this);
         statusBar = null;
     }
 
@@ -38,8 +51,7 @@ public final class AuthStatusBarWidget implements StatusBarWidget, StatusBarWidg
 
     @Override
     public @NotNull String getText() {
-        AuthService authService = ApplicationManager.getApplication().getService(AuthService.class);
-        return authService.isLoggedIn() ? "Signed in" : "Not signed in";
+        return cachedText;
     }
 
     @Override
@@ -57,10 +69,26 @@ public final class AuthStatusBarWidget implements StatusBarWidget, StatusBarWidg
         return null;
     }
 
-    /** Call after login/logout completes so the widget text refreshes immediately. */
-    public void refresh() {
-        if (statusBar != null) {
-            statusBar.updateWidget(ID);
+    /** Recomputes login state off the EDT, then asks the status bar to repaint. */
+    private void refreshState() {
+        ApplicationManager.getApplication().executeOnPooledThread(() -> {
+            AuthService authService = ApplicationManager.getApplication().getService(AuthService.class);
+            cachedText = authService.isLoggedIn() ? "Signed in" : "Not signed in";
+
+            StatusBar bar = statusBar;
+            if (bar != null) {
+                ApplicationManager.getApplication().invokeLater(() -> bar.updateWidget(ID));
+            }
+        });
+    }
+
+    /**
+     * Call after any login/logout state change so every open project's
+     * widget picks up the new state. Safe to call from the EDT.
+     */
+    public static void refreshAll() {
+        for (AuthStatusBarWidget widget : ACTIVE_WIDGETS) {
+            widget.refreshState();
         }
     }
 }
