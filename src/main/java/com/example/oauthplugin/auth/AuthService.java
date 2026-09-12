@@ -10,6 +10,7 @@ import com.intellij.ide.passwordSafe.PasswordSafe;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.util.net.JdkProxyProvider;
 
 import com.sun.net.httpserver.HttpServer;
 
@@ -60,7 +61,13 @@ public final class AuthService {
     private static final int LOGIN_TIMEOUT_SECONDS = 300; // 5 minutes
     private static final long EXPIRY_SAFETY_MARGIN_SECONDS = 60;
 
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    // Routes token exchange/refresh calls through whatever proxy the user has
+    // configured in the IDE (Settings > Appearance & Behavior > System Settings
+    // > HTTP Proxy), instead of only the JVM's system-property defaults.
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .proxy(JdkProxyProvider.getInstance().getProxySelector())
+            .authenticator(JdkProxyProvider.getInstance().getAuthenticator())
+            .build();
     private final Gson gson = new Gson();
     private final ExecutorService authExecutor =
             Executors.newSingleThreadExecutor(r -> {
@@ -71,6 +78,10 @@ public final class AuthService {
 
     // Guards against two concurrent login attempts racing each other.
     private final AtomicReference<CompletableFuture<Void>> inFlightLogin = new AtomicReference<>();
+
+    // The pending browser-callback wait for the current login attempt, if
+    // any; cancelLogin() cancels this to let a caller abort the wait early.
+    private final AtomicReference<CompletableFuture<String>> inFlightCodeFuture = new AtomicReference<>();
 
     // ------------------------------------------------------------------
     // Public API
@@ -96,6 +107,19 @@ public final class AuthService {
 
         authExecutor.submit(() -> runLoginFlow(future));
         return future;
+    }
+
+    /**
+     * Cancels the current login attempt's wait for the browser callback, if
+     * one is in progress. No-op otherwise. Lets a "waiting for sign-in..."
+     * progress UI offer a working Cancel button instead of forcing the user
+     * to wait out the full login timeout.
+     */
+    public void cancelLogin() {
+        CompletableFuture<String> codeFuture = inFlightCodeFuture.get();
+        if (codeFuture != null) {
+            codeFuture.cancel(true);
+        }
     }
 
     /**
@@ -172,9 +196,14 @@ public final class AuthService {
         return refreshAccessToken(refreshToken);
     }
 
-    /** Forces the next getValidAccessToken() call to require a fresh login. */
+    /**
+     * Forces the next getValidAccessToken() call to require a fresh login.
+     * Safe to call from any thread: the actual clearing is serialized onto
+     * the same auth executor every other token mutation uses, so this can't
+     * interleave with an in-flight login/refresh's own credential writes.
+     */
     public void invalidateSession() {
-        clearStoredTokens();
+        authExecutor.submit(this::clearStoredTokens);
     }
 
     /** The HttpClient this service already maintains, for reuse by API callers. */
@@ -198,6 +227,7 @@ public final class AuthService {
             String redirectUri = "http://127.0.0.1:" + port + "/callback";
 
             CompletableFuture<String> codeFuture = new CompletableFuture<>();
+            inFlightCodeFuture.set(codeFuture);
             server.createContext("/callback", exchange ->
                     handleCallback(exchange, state, codeFuture));
             server.setExecutor(null); // default executor is fine for a single short-lived request
@@ -223,6 +253,7 @@ public final class AuthService {
             LOG.warn("OAuth login failed", e);
             resultFuture.completeExceptionally(e);
         } finally {
+            inFlightCodeFuture.set(null);
             if (server != null) {
                 server.stop(0);
             }
