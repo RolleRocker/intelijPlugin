@@ -2,12 +2,14 @@ package com.example.oauthplugin.settings;
 
 import com.example.oauthplugin.auth.AuthService;
 import com.example.oauthplugin.statusbar.AuthStatusBarWidget;
+import com.example.oauthplugin.actions.LoginProgress;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.util.ui.FormBuilder;
 
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import java.util.concurrent.CompletableFuture;
 
 /** Swing panel shown on the OAuth Sample Plugin settings page. */
 public final class OAuthSettingsComponent {
@@ -27,7 +29,9 @@ public final class OAuthSettingsComponent {
                 if (authService.isLoggedIn()) {
                     authService.logout().whenComplete((result, throwable) -> onAuthActionComplete());
                 } else {
-                    authService.login().whenComplete((result, throwable) -> onAuthActionComplete());
+                    CompletableFuture<Void> loginFuture = authService.login();
+                    LoginProgress.show(null, authService, loginFuture);
+                    loginFuture.whenComplete((result, throwable) -> onAuthActionComplete());
                 }
             });
         });

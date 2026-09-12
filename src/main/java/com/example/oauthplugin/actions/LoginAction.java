@@ -10,13 +10,18 @@ import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.concurrent.CompletableFuture;
+
 public final class LoginAction extends AnAction {
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         AuthService authService = ApplicationManager.getApplication().getService(AuthService.class);
 
-        authService.login().whenComplete((result, throwable) ->
+        CompletableFuture<Void> loginFuture = authService.login();
+        LoginProgress.show(e.getProject(), authService, loginFuture);
+
+        loginFuture.whenComplete((result, throwable) ->
                 ApplicationManager.getApplication().invokeLater(() -> {
                     NotificationGroupManager notifications = NotificationGroupManager.getInstance();
                     if (throwable != null) {
