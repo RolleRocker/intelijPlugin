@@ -24,7 +24,10 @@ public final class AuthStatusBarWidget implements StatusBarWidget, StatusBarWidg
     // cached value so the platform can call it cheaply/synchronously.
     private volatile String cachedText = "Not signed in";
 
-    private StatusBar statusBar;
+    // install()/dispose() run on the EDT; refreshState() reads this on a
+    // pooled thread, so it needs to be volatile for that read to see a
+    // dispose()'d null reliably instead of racing on a stale cached value.
+    private volatile StatusBar statusBar;
 
     @Override
     public @NotNull String ID() {
