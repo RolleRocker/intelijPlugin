@@ -3,6 +3,8 @@ package com.example.oauthplugin.settings;
 import com.example.oauthplugin.auth.AuthService;
 import com.example.oauthplugin.statusbar.AuthStatusBarWidget;
 import com.example.oauthplugin.actions.LoginProgress;
+import com.intellij.notification.NotificationGroupManager;
+import com.intellij.notification.NotificationType;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.util.ui.FormBuilder;
 
@@ -27,11 +29,13 @@ public final class OAuthSettingsComponent {
             // isLoggedIn() performs PasswordSafe I/O, so decide the branch off the EDT.
             ApplicationManager.getApplication().executeOnPooledThread(() -> {
                 if (authService.isLoggedIn()) {
-                    authService.logout().whenComplete((result, throwable) -> onAuthActionComplete());
+                    authService.logout().whenComplete((result, throwable) ->
+                            onAuthActionComplete("Sign-out failed", throwable));
                 } else {
                     CompletableFuture<Void> loginFuture = authService.login();
                     LoginProgress.show(null, authService, loginFuture);
-                    loginFuture.whenComplete((result, throwable) -> onAuthActionComplete());
+                    loginFuture.whenComplete((result, throwable) ->
+                            onAuthActionComplete("Sign-in failed", throwable));
                 }
             });
         });
@@ -63,8 +67,14 @@ public final class OAuthSettingsComponent {
         });
     }
 
-    private void onAuthActionComplete() {
+    private void onAuthActionComplete(String failureTitle, Throwable throwable) {
         ApplicationManager.getApplication().invokeLater(() -> {
+            if (throwable != null) {
+                NotificationGroupManager.getInstance()
+                        .getNotificationGroup("OAuth Sample Plugin")
+                        .createNotification(failureTitle, throwable.getMessage(), NotificationType.ERROR)
+                        .notify(null);
+            }
             refresh();
             AuthStatusBarWidget.refreshAll();
         });
