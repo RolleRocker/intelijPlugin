@@ -278,19 +278,28 @@ public final class AuthService {
             String returnedState = params.get("state");
             String code = params.get("code");
 
+            // Defer completing codeFuture until after the response below is
+            // fully written: completing it immediately unblocks
+            // runLoginFlow, whose finally block stops the loopback server,
+            // which can race this handler thread and reset the browser's
+            // connection before the page is delivered.
             String message;
+            Runnable completeCode;
             if (returnedState == null || !returnedState.equals(expectedState)) {
                 message = "Security check failed. You can close this window.";
-                codeFuture.completeExceptionally(new AuthException("OAuth state mismatch - possible CSRF attempt."));
+                completeCode = () -> codeFuture.completeExceptionally(
+                        new AuthException("OAuth state mismatch - possible CSRF attempt."));
             } else if (error != null) {
                 message = "Authentication failed: " + escapeHtml(error) + ". You can close this window.";
-                codeFuture.completeExceptionally(new AuthException("Provider returned error: " + escapeHtml(error)));
+                completeCode = () -> codeFuture.completeExceptionally(
+                        new AuthException("Provider returned error: " + escapeHtml(error)));
             } else if (code == null) {
                 message = "No authorization code received. You can close this window.";
-                codeFuture.completeExceptionally(new AuthException("Missing 'code' parameter in callback."));
+                completeCode = () -> codeFuture.completeExceptionally(
+                        new AuthException("Missing 'code' parameter in callback."));
             } else {
                 message = "Signed in. You can close this window and return to the IDE.";
-                codeFuture.complete(code);
+                completeCode = () -> codeFuture.complete(code);
             }
 
             byte[] out = ("<html><body style=\"font-family:sans-serif;padding:2em;\">"
@@ -298,6 +307,8 @@ public final class AuthService {
             exchange.getResponseHeaders().add("Content-Type", "text/html; charset=utf-8");
             exchange.sendResponseHeaders(200, out.length);
             exchange.getResponseBody().write(out);
+            exchange.getResponseBody().flush();
+            completeCode.run();
         } finally {
             exchange.close();
         }
