@@ -328,15 +328,23 @@ public final class AuthService {
                 + "&refresh_token=" + encode(refreshToken)
                 + "&client_id=" + encode(CLIENT_ID);
 
+        TokenResponse tokens;
         try {
-            TokenResponse tokens = postForToken(body);
-            storeTokens(tokens);
-            return tokens.accessToken;
-        } catch (Exception e) {
-            LOG.info("Refresh failed; clearing local session.", e);
-            clearStoredTokens();
-            throw new NotAuthenticatedException("Session expired; please sign in again.", e);
+            tokens = postForToken(body);
+        } catch (TokenEndpointException e) {
+            if (e.statusCode == 400 || e.statusCode == 401) {
+                LOG.info("Refresh token rejected by provider; clearing local session.", e);
+                clearStoredTokens();
+                throw new NotAuthenticatedException("Session expired; please sign in again.", e);
+            }
+            // Transient provider-side failure (5xx, etc.) - keep the stored
+            // refresh token so the next attempt can still succeed.
+            LOG.info("Refresh failed with a transient error; local session kept.", e);
+            throw e;
         }
+
+        storeTokens(tokens);
+        return tokens.accessToken;
     }
 
     private TokenResponse postForToken(String formBody) {
@@ -352,8 +360,8 @@ public final class AuthService {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() / 100 != 2) {
-                throw new AuthException("Token endpoint returned HTTP " + response.statusCode()
-                        + ": " + response.body());
+                throw new TokenEndpointException(response.statusCode(),
+                        "Token endpoint returned HTTP " + response.statusCode() + ": " + response.body());
             }
 
             TokenResponse parsed = gson.fromJson(response.body(), TokenResponse.class);
@@ -484,6 +492,21 @@ public final class AuthService {
 
         @SerializedName("token_type")
         String tokenType;
+    }
+
+    /**
+     * An AuthException carrying the HTTP status the token endpoint returned,
+     * so callers can distinguish "the refresh token was rejected" (400/401)
+     * from a transient failure (5xx, timeout) that shouldn't wipe the
+     * session.
+     */
+    private static final class TokenEndpointException extends AuthException {
+        final int statusCode;
+
+        TokenEndpointException(int statusCode, String message) {
+            super(message);
+            this.statusCode = statusCode;
+        }
     }
 
     public static class AuthException extends RuntimeException {
