@@ -26,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HashMap;
@@ -60,6 +61,8 @@ public final class AuthService {
     private static final String CREDENTIAL_SERVICE_NAME = "MyOAuthPlugin";
     private static final int LOGIN_TIMEOUT_SECONDS = 300; // 5 minutes
     private static final long EXPIRY_SAFETY_MARGIN_SECONDS = 60;
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(15);
+    private static final Duration TOKEN_REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
     // Routes token exchange/refresh calls through whatever proxy the user has
     // configured in the IDE (Settings > Appearance & Behavior > System Settings
@@ -67,6 +70,7 @@ public final class AuthService {
     private final HttpClient httpClient = HttpClient.newBuilder()
             .proxy(JdkProxyProvider.getInstance().getProxySelector())
             .authenticator(JdkProxyProvider.getInstance().getAuthenticator())
+            .connectTimeout(CONNECT_TIMEOUT)
             .build();
     private final Gson gson = new Gson();
     private final ExecutorService authExecutor =
@@ -341,6 +345,7 @@ public final class AuthService {
                     .uri(URI.create(TOKEN_ENDPOINT))
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .header("Accept", "application/json")
+                    .timeout(TOKEN_REQUEST_TIMEOUT)
                     .POST(HttpRequest.BodyPublishers.ofString(formBody))
                     .build();
 
