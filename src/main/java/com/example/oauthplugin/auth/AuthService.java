@@ -63,6 +63,10 @@ public final class AuthService {
     private static final long EXPIRY_SAFETY_MARGIN_SECONDS = 60;
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(15);
     private static final Duration TOKEN_REQUEST_TIMEOUT = Duration.ofSeconds(30);
+    // expires_in is optional per RFC 6749; assume a conservative default
+    // lifetime when a provider omits it, rather than treating the token as
+    // perpetually expired.
+    private static final long DEFAULT_ACCESS_TOKEN_TTL_SECONDS = 3600;
 
     // Routes token exchange/refresh calls through whatever proxy the user has
     // configured in the IDE (Settings > Appearance & Behavior > System Settings
@@ -386,10 +390,11 @@ public final class AuthService {
             writeCredential(tokenKey("refreshToken"), tokens.refreshToken);
         }
 
-        if (tokens.expiresInSeconds != null) {
-            Instant expiry = Instant.now().plusSeconds(tokens.expiresInSeconds);
-            writeCredential(tokenKey("accessTokenExpiry"), expiry.toString());
-        }
+        long ttlSeconds = tokens.expiresInSeconds != null
+                ? tokens.expiresInSeconds
+                : DEFAULT_ACCESS_TOKEN_TTL_SECONDS;
+        Instant expiry = Instant.now().plusSeconds(ttlSeconds);
+        writeCredential(tokenKey("accessTokenExpiry"), expiry.toString());
     }
 
     private void clearStoredTokens() {
