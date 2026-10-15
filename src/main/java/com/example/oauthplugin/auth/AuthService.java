@@ -102,19 +102,20 @@ public final class AuthService {
      * stored, or completes exceptionally on failure/timeout/cancellation.
      */
     public CompletableFuture<Void> login() {
-        CompletableFuture<Void> existing = inFlightLogin.get();
-        if (existing != null && !existing.isDone()) {
-            return existing;
-        }
+        while (true) {
+            CompletableFuture<Void> existing = inFlightLogin.get();
+            if (existing != null && !existing.isDone()) {
+                return existing;
+            }
 
-        CompletableFuture<Void> future = new CompletableFuture<>();
-        if (!inFlightLogin.compareAndSet(existing, future)) {
-            // Another thread won the race to start a login; join it instead.
-            return inFlightLogin.get();
+            CompletableFuture<Void> future = new CompletableFuture<>();
+            if (inFlightLogin.compareAndSet(existing, future)) {
+                authExecutor.submit(() -> runLoginFlow(future));
+                return future;
+            }
+            // Another thread won the race; loop and re-check its state
+            // instead of blindly joining whatever is there now.
         }
-
-        authExecutor.submit(() -> runLoginFlow(future));
-        return future;
     }
 
     /**
