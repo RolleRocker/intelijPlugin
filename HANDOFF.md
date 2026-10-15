@@ -17,9 +17,10 @@ Built from scratch in this repo across several sessions.
 
 ## Current state (as of this handoff)
 
-- `git log --oneline` has 18 commits, all on `master`. **The last 3 commits
-  are NOT pushed to `origin` yet** (`git status` will show "ahead of
-  'origin/master' by 3 commits") — ask the user before pushing, don't assume.
+- `git log --oneline` has 26 commits, all on `master`. **The last 8 commits
+  (the round-2 fixes below) are NOT pushed to `origin` yet** (`git status`
+  will show "ahead of 'origin/master' by 8 commits") — ask the user before
+  pushing, don't assume.
 - `./gradlew clean build` passes: compiles, packages, and all 9 unit tests
   in `AuthServiceCryptoTest` pass.
 - The plugin has been launched once via `./gradlew runIde` and confirmed to
@@ -43,16 +44,19 @@ Built from scratch in this repo across several sessions.
      bar widget that never repainted, a settings panel that read stale state
      after async logout, EDT-blocking `PasswordSafe` reads, and
      `AuthenticatedApiClient` not reusing the shared `HttpClient`.
-   - **Round 2** (10 findings; 2 fixed, 8 still open — see below), run after
-     round 1's fixes plus 3 more requested additions (proxy support,
-     cancellable login progress, 401-triggers-warning). Commits `0e91902`,
-     `9235590`, `6f88a28`.
+   - **Round 2** (10 findings, all fixed), run after round 1's fixes plus 3
+     more requested additions (proxy support, cancellable login progress,
+     401-triggers-warning). First 2 fixed in commits `0e91902`, `9235590`,
+     `6f88a28`; remaining 8 fixed on 2026-10-15 (commits `6eee6bd`..`9231286`,
+     listed below).
 
-## Open findings from the round-2 review — NOT yet fixed
+## Open findings from the round-2 review — all fixed (2026-10-15)
 
-These were verified (CONFIRMED) by the reviewer against the source at the
-time. Line numbers will have drifted since; re-locate by method name. Listed
-roughly most → least severe.
+All 8 findings below were fixed in individual commits (`6eee6bd`, `aa8b1cc`,
+`e4429bf`, `75dc6c8`, `ab482e5`, `229c658`, `ff3e14c`, `9231286`), each
+verified with `./gradlew test` before committing. Kept here for context on
+what the bugs were; don't re-report these unless a regression reintroduces
+them.
 
 1. **Security + correctness, `AuthService.handleCallback()`**: the
    `error` query param is HTML-escaped before going into the browser page
@@ -126,10 +130,9 @@ thread; `AuthenticatedApiClient`'s 401 path now calls
 
 ## Suggested next steps (pick up here)
 
-1. Ask the user whether to push the 3 unpushed commits, if not already done.
-2. Ask the user whether to fix the 8 open findings above (they were shown
-   the list and hadn't answered yet when this handoff was written).
-3. Longer-term, still out of scope per earlier explicit decisions:
+1. All commits through `9231286` are on `master` but **not pushed to
+   `origin` yet** — ask the user before pushing.
+2. Longer-term, still out of scope per earlier explicit decisions:
    - Split Mode / Remote Development support (Phase 8 of the original plan
      doc) — deliberately deferred, build single-module first.
    - Deeper test coverage: a `PasswordSafe`-backed platform-fixture test,
