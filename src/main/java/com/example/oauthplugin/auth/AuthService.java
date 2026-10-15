@@ -270,12 +270,12 @@ public final class AuthService {
             String code = params.get("code");
 
             String message;
-            if (error != null) {
-                message = "Authentication failed: " + escapeHtml(error) + ". You can close this window.";
-                codeFuture.completeExceptionally(new AuthException("Provider returned error: " + error));
-            } else if (returnedState == null || !returnedState.equals(expectedState)) {
+            if (returnedState == null || !returnedState.equals(expectedState)) {
                 message = "Security check failed. You can close this window.";
                 codeFuture.completeExceptionally(new AuthException("OAuth state mismatch - possible CSRF attempt."));
+            } else if (error != null) {
+                message = "Authentication failed: " + escapeHtml(error) + ". You can close this window.";
+                codeFuture.completeExceptionally(new AuthException("Provider returned error: " + escapeHtml(error)));
             } else if (code == null) {
                 message = "No authorization code received. You can close this window.";
                 codeFuture.completeExceptionally(new AuthException("Missing 'code' parameter in callback."));
